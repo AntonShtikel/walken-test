@@ -1,5 +1,0 @@
-[deploy]
-release_command = "npm ci --omit=dev"
-
-[processes]
-app = "npm run start"
