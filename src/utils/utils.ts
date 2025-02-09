@@ -34,26 +34,34 @@ export const calculateTokenUSD = (
   }
 };
 
-export function formatTransactionData(data: Record<string, any>) {
+export function formatTransactionDataForPools(
+  dataForPools: Record<string, any[]>,
+  pair: string,
+) {
   const round = (num: number) => Number(num.toFixed(2));
 
-  return `
-<b>Pair:</b> ${data.pair}⚖️
-<b>Protocol:</b> ${data.protocol}
-<b>Market Address:</b> <code>${data.address}</code>
+  const formatTokenData = (token: {
+    mint: string;
+    amount: number;
+    usdValue: number;
+  }) => {
+    return `  - Mint: <code>${token.mint}</code>\n    - Amount: ${round(token.amount)}\n    - USD Value: $${round(token.usdValue)}`;
+  };
 
-<b>Token A:</b>
-  - Mint: <code>${data.tokenA.mint}</code>
-  - Amount: ${round(data.tokenA.amount)}
-  - USD Value: $${round(data.tokenA.usdValue)}
+  let resultMessage = `<b>Data of pools ⚡️:</b>\n<b>Pair:</b> ${pair}⚖️`;
 
-<b>Token B:</b>
-  - Mint: <code>${data.tokenB.mint}</code>
-  - Amount: ${round(data.tokenB.amount)}
-  - USD Value: $${round(data.tokenB.usdValue)}
+  for (const poolAddress in dataForPools) {
+    const poolData = dataForPools[poolAddress];
 
-<b>Block Timestamp:</b> ${data.blockTimestamp.toISOString()}
-`;
+    for (const data of poolData) {
+      resultMessage += `
+\n<b>Market Address:</b> <code>${data.address}</code>
+<b>Token A:</b>\n${formatTokenData(data.tokenA)}
+<b>Token B:</b>\n${formatTokenData(data.tokenB)}`;
+    }
+  }
+
+  return resultMessage;
 }
 
 export function formatTransactionResult(

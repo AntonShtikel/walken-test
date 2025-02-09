@@ -4,5 +4,9 @@ import { tgBot, tgChannel } from '../config';
 const bot = new TelegramBot(tgBot, { polling: true });
 export async function sendMessage(message: any): Promise<void> {
   const channel = `@${tgChannel}`;
-  await bot.sendMessage(channel, message, { parse_mode: 'HTML' });
+  try {
+    await bot.sendMessage(channel, message, { parse_mode: 'HTML' });
+  } catch (error) {
+    console.log(error);
+  }
 }
