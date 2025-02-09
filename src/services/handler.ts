@@ -32,7 +32,7 @@ let lastProcessedTime = 0;
 const allowedTokens = new Set(['WSOL', 'USDT', 'jailstool']);
 
 export async function handleData(data: Record<string, any>) {
-  if (lastScreen.getTime() < new Date().getTime() - 60 * 60 * 1000) {
+  if (lastScreen.getTime() < new Date().getTime() - 30 * 60 * 1000) {
     console.log('Resetting the lastScreen...');
     console.log(transactionStatus);
     const message = formatTransactionResult(
@@ -52,7 +52,7 @@ export async function handleData(data: Record<string, any>) {
     const isAllowedToken =
       allowedTokens.has(data.buy_symbol) && allowedTokens.has(data.sell_symbol);
 
-    if (isAllowedToken && currentTime - lastProcessedTime >= 40000) {
+    if (isAllowedToken && currentTime - lastProcessedTime >= 100000) {
       transactionStatus.total++;
       lastProcessedTime = currentTime;
       handleTransaction(data);
@@ -71,8 +71,8 @@ export async function handleTransaction(transaction: Record<string, any>) {
     const pools = await getRaydiumLiquidityPoolAddress(
       transaction.buy_mint_address,
       transaction.sell_mint_address,
+      transaction.market_address,
     );
-    pools.push(transaction.market_address);
 
     if (!pools || pools.length === 0) {
       transactionStatus.failure++;
@@ -80,6 +80,7 @@ export async function handleTransaction(transaction: Record<string, any>) {
     }
 
     const dataForPools: Record<string, any[]> = {};
+    let hasSuccess = false;
 
     for (let poolAddress of pools) {
       poolAddress = new PublicKey(poolAddress);
@@ -93,7 +94,6 @@ export async function handleTransaction(transaction: Record<string, any>) {
       );
 
       if (!poolAccounts.value.length) {
-        transactionStatus.failure++;
         continue;
       }
 
@@ -107,7 +107,6 @@ export async function handleTransaction(transaction: Record<string, any>) {
         );
 
       if (poolTokens.length < 2) {
-        transactionStatus.failure++;
         continue;
       }
 
@@ -149,36 +148,52 @@ export async function handleTransaction(transaction: Record<string, any>) {
       if (!dataForPools[poolAddress.toBase58()]) {
         dataForPools[poolAddress.toBase58()] = [];
       }
-
       dataForPools[poolAddress.toBase58()].push(data);
+      hasSuccess = true;
+    }
 
+    if (hasSuccess) {
       transactionStatus.success++;
+    } else {
+      transactionStatus.failure++;
     }
 
     const message = formatTransactionDataForPools(
       dataForPools,
       `${transaction.buy_symbol}/${transaction.sell_symbol}`,
     );
+    if (!message) {
+      transactionStatus.failure++;
+    }
     sendMessage(message);
     pushToWSocket(dataForPools);
-
-    console.log(dataForPools);
   } catch (e) {
     console.error('Error handling transaction:', e);
+    transactionStatus.failure++;
   }
 }
 
-async function getRaydiumLiquidityPoolAddress(tokenA: string, tokenB: string) {
+async function getRaydiumLiquidityPoolAddress(
+  tokenA: string,
+  tokenB: string,
+  marketAddress: string,
+) {
   try {
-    const pools = await axios.get(
+    const response = await axios.get(
       `https://api-v3.raydium.io/pools/info/mint?mint1=${tokenA}&mint2=${tokenB}&poolType=all&poolSortField=default&sortType=desc&pageSize=3&page=1`,
     );
 
-    const poolsData = pools.data.data.data;
+    const poolsData = response.data.data.data;
+    const pools = poolsData.map((pool: { id: string }) => pool.id);
 
-    return poolsData.map((pool: { id: string }) => pool.id);
+    if (!pools.includes(marketAddress)) {
+      pools.push(marketAddress);
+    }
+
+    return pools;
   } catch (error) {
     console.error('Error fetching liquidity pool address:', error);
+    return [];
   }
 }
 
