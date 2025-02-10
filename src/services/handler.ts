@@ -2,7 +2,7 @@ import { Connection, PublicKey } from '@solana/web3.js';
 import { TOKEN_PROGRAM_ID } from '@solana/spl-token';
 import {
   calculateTokenUSD,
-  formatTransactionDataForPools,
+  formatPoolDistribution,
   formatTransactionResult,
   sendMessage,
   withRetry,
@@ -32,7 +32,7 @@ let lastProcessedTime = 0;
 const allowedTokens = new Set(['WSOL', 'USDT', 'jailstool']);
 
 export async function handleData(data: Record<string, any>) {
-  if (lastScreen.getTime() < new Date().getTime() - 30 * 60 * 1000) {
+  if (lastScreen.getTime() < new Date().getTime() - 60 * 60 * 1000) {
     console.log('Resetting the lastScreen...');
     console.log(transactionStatus);
     const message = formatTransactionResult(
@@ -71,7 +71,6 @@ export async function handleTransaction(transaction: Record<string, any>) {
     const pools = await getRaydiumLiquidityPoolAddress(
       transaction.buy_mint_address,
       transaction.sell_mint_address,
-      transaction.market_address,
     );
 
     if (!pools || pools.length === 0) {
@@ -82,9 +81,8 @@ export async function handleTransaction(transaction: Record<string, any>) {
     const dataForPools: Record<string, any[]> = {};
     let hasSuccess = false;
 
-    for (let poolAddress of pools) {
-      poolAddress = new PublicKey(poolAddress);
-
+    for (let pool of pools) {
+      const poolAddress = new PublicKey(pool.id);
       await delay(10000);
 
       const poolAccounts = await withRetry(() =>
@@ -131,6 +129,7 @@ export async function handleTransaction(transaction: Record<string, any>) {
       const data: Record<string, any> = {
         pair: `${transaction.buy_symbol}/${transaction.sell_symbol}`,
         protocol: transaction.dex_protocol_name,
+        type: pool.type,
         address: poolAddress.toBase58(),
         tokenA: {
           mint: transaction.buy_mint_address,
@@ -158,13 +157,14 @@ export async function handleTransaction(transaction: Record<string, any>) {
       transactionStatus.failure++;
     }
 
-    const message = formatTransactionDataForPools(
+    const message = formatPoolDistribution(
       dataForPools,
       `${transaction.buy_symbol}/${transaction.sell_symbol}`,
     );
     if (!message) {
       transactionStatus.failure++;
     }
+
     sendMessage(message);
     pushToWSocket(dataForPools);
   } catch (e) {
@@ -173,22 +173,17 @@ export async function handleTransaction(transaction: Record<string, any>) {
   }
 }
 
-async function getRaydiumLiquidityPoolAddress(
-  tokenA: string,
-  tokenB: string,
-  marketAddress: string,
-) {
+async function getRaydiumLiquidityPoolAddress(tokenA: string, tokenB: string) {
   try {
     const response = await axios.get(
       `https://api-v3.raydium.io/pools/info/mint?mint1=${tokenA}&mint2=${tokenB}&poolType=all&poolSortField=default&sortType=desc&pageSize=3&page=1`,
     );
 
     const poolsData = response.data.data.data;
-    const pools = poolsData.map((pool: { id: string }) => pool.id);
-
-    if (!pools.includes(marketAddress)) {
-      pools.push(marketAddress);
-    }
+    const pools = poolsData.map((pool: { id: string; type: string }) => ({
+      id: pool.id,
+      type: pool.type,
+    }));
 
     return pools;
   } catch (error) {

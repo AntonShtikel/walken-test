@@ -90,3 +90,40 @@ export function formatTransactionResult(
   - Total: ${transactionStatus.total - previousTransactionStatus.total}
 `;
 }
+
+export function formatPoolDistribution(
+  dataForPools: Record<string, any[]>,
+  pair: string,
+): string {
+  let totalTokenA = 0;
+  let totalTokenB = 0;
+  let totalUSDTokenA = 0;
+  let totalUSDTokenB = 0;
+
+  for (const poolData of Object.values(dataForPools)) {
+    for (const data of poolData) {
+      totalTokenA += data.tokenA.amount;
+      totalTokenB += data.tokenB.amount;
+      totalUSDTokenA += data.tokenA.usdValue;
+      totalUSDTokenB += data.tokenB.usdValue;
+    }
+  }
+
+  const firstPool = Object.values(dataForPools)[0]?.[0];
+  const tokenAName = firstPool ? firstPool.tokenA.mint : 'Token A';
+  const tokenBName = firstPool ? firstPool.tokenB.mint : 'Token B';
+
+  let message = `Pair: ${pair}\n`;
+  message += `Total:\n  - ${tokenAName}: ${totalTokenA} (~$${totalUSDTokenA.toFixed(2)})\n  - ${tokenBName}: ${totalTokenB} (~$${totalUSDTokenB.toFixed(2)})\n\n`;
+  message += `Pools distribution:\n`;
+
+  for (const [poolAddress, poolData] of Object.entries(dataForPools)) {
+    for (const data of poolData) {
+      const percentA = ((data.tokenA.amount / totalTokenA) * 100).toFixed(2);
+      const percentB = ((data.tokenB.amount / totalTokenB) * 100).toFixed(2);
+      message += `  Pool type: ${data.type}\n address: ${poolAddress}:\n    - ${tokenAName}: ${percentA}% (~$${data.tokenA.usdValue.toFixed(2)})\n    - ${tokenBName}: ${percentB}% (~$${data.tokenB.usdValue.toFixed(2)})\n\n`;
+    }
+  }
+
+  return message;
+}
